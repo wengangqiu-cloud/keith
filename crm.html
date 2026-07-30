@@ -18,10 +18,7 @@
   </header>
 
   <main class="wrap">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-      <h2>地產 Lead CRM</h2>
-      <div id="authArea" style="display:flex;gap:8px;align-items:center"></div>
-    </div>
+    <h2>地產 Lead CRM</h2>
 
     <div class="grid stats-grid">
       <div class="stat"><b id="sTotal">0</b><span class="muted">總Lead</span></div>
@@ -91,15 +88,15 @@
 
       <label>備註</label>
       <textarea id="notes"></textarea>
-      <button id="addBtn" class="primary" style="width:100%;margin-top:10px">新增Lead</button>
+      <button class="primary" style="width:100%;margin-top:10px" onclick="addLead()">新增Lead</button>
     </section>
 
     <section class="card">
       <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap">
         <h3>Lead列表</h3>
         <div>
-          <button id="exportBtn" class="secondary">匯出CSV</button>
-          <button id="clearBtn" class="danger">清除全部</button>
+          <button class="secondary" onclick="exportCSV()">匯出CSV</button>
+          <button class="danger" onclick="clearAll()">清除全部</button>
         </div>
       </div>
 
@@ -126,100 +123,20 @@
     <small>© 2026 置業快覽</small>
   </footer>
 
-  <!-- Firebase (compat) SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-
   <script>
-    // --- TODO: Replace with your Firebase config ---
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      // optional: storageBucket, messagingSenderId, appId
-    };
-    // initialize
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    // CRM logic (kept almost identical to original, using localStorage key propertyLeadsCRM)
+    let leads = JSON.parse(localStorage.getItem('propertyLeadsCRM') || '[]');
 
-    // UI elements
-    const authArea = document.getElementById('authArea');
-    const addBtn = document.getElementById('addBtn');
-    const exportBtn = document.getElementById('exportBtn');
-    const clearBtn = document.getElementById('clearBtn');
-
-    // state
-    let currentUser = null;
-    let isAdmin = false;
-    let leadsCache = []; // local cache of fetched leads
-
-    // create auth UI
-    function renderAuthUI(user) {
-      authArea.innerHTML = '';
-      if (!user) {
-        const loginBtn = document.createElement('button');
-        loginBtn.textContent = '以 Google 登入';
-        loginBtn.className = 'primary';
-        loginBtn.onclick = () => {
-          const provider = new firebase.auth.GoogleAuthProvider();
-          auth.signInWithPopup(provider).catch(err => alert(err.message));
-        };
-        authArea.appendChild(loginBtn);
-      } else {
-        const span = document.createElement('span');
-        span.textContent = user.displayName || user.email;
-        span.style.marginRight = '8px';
-        authArea.appendChild(span);
-        if (isAdmin) {
-          const adminBadge = document.createElement('span');
-          adminBadge.textContent = 'Admin';
-          adminBadge.style.background = '#fde68a';
-          adminBadge.style.padding = '6px 8px';
-          adminBadge.style.borderRadius = '8px';
-          adminBadge.style.fontWeight = '700';
-          authArea.appendChild(adminBadge);
-        }
-        const logoutBtn = document.createElement('button');
-        logoutBtn.textContent = '登出';
-        logoutBtn.className = '';
-        logoutBtn.onclick = () => auth.signOut();
-        authArea.appendChild(logoutBtn);
-      }
+    function save() {
+      localStorage.setItem('propertyLeadsCRM', JSON.stringify(leads));
+      render();
     }
 
-    // auth state listener
-    auth.onAuthStateChanged(async user => {
-      currentUser = user;
-      if (!user) {
-        isAdmin = false;
-        renderAuthUI(null);
-        // show message or hide UI
-        document.querySelector('main').classList.add('signed-out');
-        // clear table
-        leadsCache = [];
-        render();
-        return;
-      }
-      // get token result to check custom claims
-      try {
-        const idTokenResult = await user.getIdTokenResult(true);
-        isAdmin = !!(idTokenResult && idTokenResult.claims && idTokenResult.claims.admin);
-      } catch (e) {
-        console.error('token error', e);
-        isAdmin = false;
-      }
-      renderAuthUI(user);
-      fetchLeads();
-    });
-
-    // add lead (writes to Firestore)
-    async function addLead() {
-      if (!currentUser) { alert('請先登入'); return; }
+    function addLead() {
       const g = id => document.getElementById(id).value.trim();
-      const doc = {
-        created: firebase.firestore.FieldValue.serverTimestamp(),
+      const x = {
+        id: Date.now(),
+        created: new Date().toISOString(),
         name: g('name'),
         phone: g('phone'),
         project: g('project'),
@@ -229,127 +146,85 @@
         status: g('status'),
         follow: g('follow'),
         source: g('source'),
-        notes: g('notes'),
-        ownerUid: currentUser.uid,
-        ownerName: currentUser.displayName || currentUser.email
+        notes: g('notes')
       };
-      if (!doc.name && !doc.phone) { alert('最少填稱呼或電話'); return; }
-      try {
-        await db.collection('leads').add(doc);
-        // clear inputs
-        ['name','phone','project','budget','purpose','grade','status','follow','source','notes'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = ''; }
-        });
-        fetchLeads();
-      } catch (e) { alert('新增失敗：'+e.message); }
-    }
-
-    // fetch leads: admin sees all, others see only own
-    async function fetchLeads() {
-      if (!currentUser) return;
-      let q;
-      if (isAdmin) {
-        q = db.collection('leads').orderBy('created','desc').limit(1000);
-      } else {
-        q = db.collection('leads').where('ownerUid','==', currentUser.uid).orderBy('created','desc');
+      if (!x.name && !x.phone) {
+        alert('最少填稱呼或電話');
+        return;
       }
-      try {
-        const snap = await q.get();
-        leadsCache = snap.docs.map(d => ({ id: d.id, ...d.data(), created: d.data().created ? d.data().created.toDate().toISOString() : '' }));
-        render();
-      } catch (e) { console.error('fetch error', e); alert('讀取失敗：'+e.message); }
+      leads.unshift(x);
+      save();
+      // clear inputs after add
+      ['name','phone','project','budget','purpose','grade','status','follow','source','notes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          if (el.tagName === 'SELECT') el.selectedIndex = 0;
+          else el.value = '';
+        }
+      });
     }
 
-    // remove lead (only allowed by rules if owner or admin)
-    async function removeLead(id) {
-      if (!currentUser) { alert('請先登入'); return; }
-      if (!confirm('刪除？')) return;
-      try {
-        await db.collection('leads').doc(id).delete();
-        fetchLeads();
-      } catch (e) { alert('刪除失敗：'+e.message); }
+    function removeLead(id) {
+      if (confirm('刪除？')) {
+        leads = leads.filter(x => x.id !== id);
+        save();
+      }
     }
 
-    // advance status
-    async function advance(id) {
-      if (!currentUser) { alert('請先登入'); return; }
+    function advance(id) {
       const o = ['新接觸','已留電話','已睇樓','二次跟進','落票','成交'];
-      try {
-        const ref = db.collection('leads').doc(id);
-        const snap = await ref.get();
-        if (!snap.exists) return; const data = snap.data();
-        const i = o.indexOf(data.status);
-        const next = o[Math.min(i+1,o.length-1)];
-        await ref.update({ status: next });
-        fetchLeads();
-      } catch (e) { alert('更新失敗：'+e.message); }
+      const x = leads.find(x => x.id === id);
+      const i = o.indexOf(x.status);
+      x.status = o[Math.min(i + 1, o.length - 1)];
+      save();
     }
 
-    // whatsapp
     function whatsapp(id) {
-      const x = leadsCache.find(l => l.id === id);
-      if (!x) return;
+      const x = leads.find(x => x.id === id);
       const d = (x.phone || '').replace(/\D/g, '');
-      const msg = encodeURIComponent(`${x.name || '你好'}，你之前睇過${x.project || '樓盤'}，我整理咗一份按你預算${x.budget || ''}嘅最新資料。你最關心嘅係${x.notes || '價錢同戶型'}，我可以直接發重點俾你。`);
+      const msg = encodeURIComponent(`${x.name || '你好'}，你之前睇過${x.project || '樓盤'}，我整理咗一份按你預算${x.budget || ''}嘅最新資料。你最關心嘅係${x.note[...]
       window.open(`https://wa.me/${d.startsWith('852') ? d : '852' + d}?text=${msg}`, '_blank');
     }
 
-    // render table
     function render() {
       const q = (document.getElementById('search').value || '').toLowerCase();
-      const today = new Date().toISOString().slice(0,10);
-      const arr = leadsCache.filter(x => JSON.stringify(x).toLowerCase().includes(q));
+      const today = new Date().toISOString().slice(0, 10);
+      const arr = leads.filter(x => JSON.stringify(x).toLowerCase().includes(q));
       document.getElementById('tbody').innerHTML = arr.map(x => `<tr>
-        <td><b>${x.name || '未命名'}</b><br>${x.phone || ''}<br><span class="muted">${x.source || ''}</span><br><small class="muted">${x.ownerName ? 'owner: '+x.ownerName : ''}</small></td>
+        <td><b>${x.name || '未命名'}</b><br>${x.phone || ''}<br><span class="muted">${x.source || ''}</span></td>
         <td>${x.project || '-'}<br>${x.budget || '-'}｜${x.purpose || '-'}</td>
         <td>${x.grade || 'B'}級<br>${x.status || '新接觸'}</td>
         <td>${x.follow || '未設定'}</td>
         <td>${x.notes || '-'}</td>
         <td>
-          <button class="secondary" onclick="whatsapp('${x.id}')">WhatsApp</button>
-          <button class="secondary" onclick="advance('${x.id}')">下一階段</button>
-          <button class="danger" onclick="removeLead('${x.id}')">刪除</button>
+          <button class="secondary" onclick="whatsapp(${x.id})">WhatsApp</button>
+          <button class="secondary" onclick="advance(${x.id})">下一階段</button>
+          <button class="danger" onclick="removeLead(${x.id})">刪除</button>
         </td>
       </tr>`).join('');
-      document.getElementById('sTotal').textContent = leadsCache.length;
-      document.getElementById('sA').textContent = leadsCache.filter(x => x.grade === 'A').length;
-      document.getElementById('sDue').textContent = leadsCache.filter(x => x.follow && x.follow <= today && x.status !== '成交').length;
-      document.getElementById('sView').textContent = leadsCache.filter(x => ['已睇樓','二次跟進','落票','成交'].includes(x.status)).length;
+      document.getElementById('sTotal').textContent = leads.length;
+      document.getElementById('sA').textContent = leads.filter(x => x.grade === 'A').length;
+      document.getElementById('sDue').textContent = leads.filter(x => x.follow && x.follow <= today && x.status !== '成交').length;
+      document.getElementById('sView').textContent = leads.filter(x => ['已睇樓','二次跟進','落票','成交'].includes(x.status)).length;
     }
 
-    // export CSV of visible leads only
     function exportCSV() {
-      const h = ['created','name','phone','project','budget','purpose','grade','status','follow','source','notes','ownerUid','ownerName'];
+      const h = ['created','name','phone','project','budget','purpose','grade','status','follow','source','notes'];
       const esc = v => `"${String(v ?? '').replaceAll('"','""')}"`;
-      const csv = '\ufeff' + [h.join(','), ...leadsCache.map(x => h.map(k => esc(x[k])).join(','))].join('\n');
+      const csv = '\ufeff' + [h.join(','), ...leads.map(x => h.map(k => esc(x[k])).join(','))].join('\n');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
       a.download = 'property_leads.csv';
       a.click();
     }
 
-    // clear all visible leads (will only clear those allowed by security rules - admin can clear all, owner can clear their own)
-    async function clearAll() {
-      if (!currentUser) { alert('請先登入'); return; }
-      if (!confirm('確定清除全部？')) return;
-      try {
-        // delete each visible doc
-        const batch = db.batch();
-        const q = isAdmin ? db.collection('leads').limit(500) : db.collection('leads').where('ownerUid','==',currentUser.uid);
-        const snap = await q.get();
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        fetchLeads();
-      } catch (e) { alert('清除失敗：'+e.message); }
+    function clearAll() {
+      if (confirm('確定清除全部？')) {
+        leads = [];
+        save();
+      }
     }
 
-    // wire events
-    addBtn.addEventListener('click', addLead);
-    exportBtn.addEventListener('click', exportCSV);
-    clearBtn.addEventListener('click', clearAll);
-
-    // initial render
     render();
   </script>
 </body>
