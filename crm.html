@@ -181,9 +181,14 @@
 
     function whatsapp(id) {
       const x = leads.find(x => x.id === id);
+      if (!x) return alert('找唔到呢個 lead');
       const d = (x.phone || '').replace(/\D/g, '');
-      const msg = encodeURIComponent(`${x.name || '你好'}，你之前睇過${x.project || '樓盤'}，我整理咗一份按你預算${x.budget || ''}嘅最新資料。你最關心嘅係${x.note[...]
-      window.open(`https://wa.me/${d.startsWith('852') ? d : '852' + d}?text=${msg}`, '_blank');
+      const note = x.notes || '';
+      const text = `${x.name || '你好'}，你之前睇過 ${x.project || '樓盤'}。預算：${x.budget || ''}。備註：${note}`;
+      const msg = encodeURIComponent(text);
+      const phone = d.startsWith('852') || d.startsWith('+') ? d : '852' + d;
+      if (!d) return alert('無電話號碼可發送 WhatsApp');
+      window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
     }
 
     function render() {
