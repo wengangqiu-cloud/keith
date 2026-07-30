@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>地產 Lead CRM</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <h1 class="brand">置業快覽</h1>
+      <nav class="nav">
+        <a href="index.html" class="nav-link">首頁</a>
+        <a href="crm.html" class="nav-link">Lead CRM</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h2>地產 Lead CRM</h2>
+
+    <div class="grid stats-grid">
+      <div class="stat"><b id="sTotal">0</b><span class="muted">總Lead</span></div>
+      <div class="stat"><b id="sA">0</b><span class="muted">A級客</span></div>
+      <div class="stat"><b id="sDue">0</b><span class="muted">今日要跟</span></div>
+      <div class="stat"><b id="sView">0</b><span class="muted">已睇樓</span></div>
+    </div>
+
+    <section class="card">
+      <h3>快速新增Lead</h3>
+      <div class="formgrid">
+        <div>
+          <label>稱呼</label>
+          <input id="name" />
+        </div>
+        <div>
+          <label>電話</label>
+          <input id="phone" />
+        </div>
+        <div>
+          <label>樓盤</label>
+          <input id="project" />
+        </div>
+
+        <div>
+          <label>預算</label>
+          <input id="budget" />
+        </div>
+        <div>
+          <label>用途</label>
+          <select id="purpose">
+            <option>自住</option>
+            <option>投資</option>
+            <option>未確定</option>
+          </select>
+        </div>
+        <div>
+          <label>級別</label>
+          <select id="grade">
+            <option>A</option>
+            <option selected>B</option>
+            <option>C</option>
+          </select>
+        </div>
+
+        <div>
+          <label>狀態</label>
+          <select id="status">
+            <option>新接觸</option>
+            <option>已留電話</option>
+            <option>已睇樓</option>
+            <option>二次跟進</option>
+            <option>落票</option>
+            <option>成交</option>
+            <option>失聯</option>
+          </select>
+        </div>
+        <div>
+          <label>下次跟進</label>
+          <input id="follow" type="date" />
+        </div>
+        <div>
+          <label>來源</label>
+          <input id="source" placeholder="示範單位通道" />
+        </div>
+      </div>
+
+      <label>備註</label>
+      <textarea id="notes"></textarea>
+      <button class="primary" style="width:100%;margin-top:10px" onclick="addLead()">新增Lead</button>
+    </section>
+
+    <section class="card">
+      <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap">
+        <h3>Lead列表</h3>
+        <div>
+          <button class="secondary" onclick="exportCSV()">匯出CSV</button>
+          <button class="danger" onclick="clearAll()">清除全部</button>
+        </div>
+      </div>
+
+      <input id="search" oninput="render()" placeholder="搜尋姓名、電話、樓盤、備註" />
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>客戶</th>
+              <th>樓盤／預算</th>
+              <th>級別／狀態</th>
+              <th>跟進</th>
+              <th>備註</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <small>© 2026 置業快覽</small>
+  </footer>
+
+  <script>
+    // CRM logic (kept almost identical to original, using localStorage key propertyLeadsCRM)
+    let leads = JSON.parse(localStorage.getItem('propertyLeadsCRM') || '[]');
+
+    function save() {
+      localStorage.setItem('propertyLeadsCRM', JSON.stringify(leads));
+      render();
+    }
+
+    function addLead() {
+      const g = id => document.getElementById(id).value.trim();
+      const x = {
+        id: Date.now(),
+        created: new Date().toISOString(),
+        name: g('name'),
+        phone: g('phone'),
+        project: g('project'),
+        budget: g('budget'),
+        purpose: g('purpose'),
+        grade: g('grade'),
+        status: g('status'),
+        follow: g('follow'),
+        source: g('source'),
+        notes: g('notes')
+      };
+      if (!x.name && !x.phone) {
+        alert('最少填稱呼或電話');
+        return;
+      }
+      leads.unshift(x);
+      save();
+      // clear inputs after add
+      ['name','phone','project','budget','purpose','grade','status','follow','source','notes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          if (el.tagName === 'SELECT') el.selectedIndex = 0;
+          else el.value = '';
+        }
+      });
+    }
+
+    function removeLead(id) {
+      if (confirm('刪除？')) {
+        leads = leads.filter(x => x.id !== id);
+        save();
+      }
+    }
+
+    function advance(id) {
+      const o = ['新接觸','已留電話','已睇樓','二次跟進','落票','成交'];
+      const x = leads.find(x => x.id === id);
+      const i = o.indexOf(x.status);
+      x.status = o[Math.min(i + 1, o.length - 1)];
+      save();
+    }
+
+    function whatsapp(id) {
+      const x = leads.find(x => x.id === id);
+      const d = (x.phone || '').replace(/\D/g, '');
+      const msg = encodeURIComponent(`${x.name || '你好'}，你之前睇過${x.project || '樓盤'}，我整理咗一份按你預算${x.budget || ''}嘅最新資料。你最關心嘅係${x.notes || '價錢同戶型'}，我可以直接發重點俾你。`);
+      window.open(`https://wa.me/${d.startsWith('852') ? d : '852' + d}?text=${msg}`, '_blank');
+    }
+
+    function render() {
+      const q = (document.getElementById('search').value || '').toLowerCase();
+      const today = new Date().toISOString().slice(0, 10);
+      const arr = leads.filter(x => JSON.stringify(x).toLowerCase().includes(q));
+      document.getElementById('tbody').innerHTML = arr.map(x => `<tr>
+        <td><b>${x.name || '未命名'}</b><br>${x.phone || ''}<br><span class="muted">${x.source || ''}</span></td>
+        <td>${x.project || '-'}<br>${x.budget || '-'}｜${x.purpose || '-'}</td>
+        <td>${x.grade || 'B'}級<br>${x.status || '新接觸'}</td>
+        <td>${x.follow || '未設定'}</td>
+        <td>${x.notes || '-'}</td>
+        <td>
+          <button class="secondary" onclick="whatsapp(${x.id})">WhatsApp</button>
+          <button class="secondary" onclick="advance(${x.id})">下一階段</button>
+          <button class="danger" onclick="removeLead(${x.id})">刪除</button>
+        </td>
+      </tr>`).join('');
+      document.getElementById('sTotal').textContent = leads.length;
+      document.getElementById('sA').textContent = leads.filter(x => x.grade === 'A').length;
+      document.getElementById('sDue').textContent = leads.filter(x => x.follow && x.follow <= today && x.status !== '成交').length;
+      document.getElementById('sView').textContent = leads.filter(x => ['已睇樓','二次跟進','落票','成交'].includes(x.status)).length;
+    }
+
+    function exportCSV() {
+      const h = ['created','name','phone','project','budget','purpose','grade','status','follow','source','notes'];
+      const esc = v => `"${String(v ?? '').replaceAll('"','""')}"`;
+      const csv = '\ufeff' + [h.join(','), ...leads.map(x => h.map(k => esc(x[k])).join(','))].join('\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      a.download = 'property_leads.csv';
+      a.click();
+    }
+
+    function clearAll() {
+      if (confirm('確定清除全部？')) {
+        leads = [];
+        save();
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>
