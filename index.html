@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>置業快覽</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <h1 class="brand">置業快覽</h1>
+      <nav class="nav">
+        <a href="index.html" class="nav-link">首頁</a>
+        <a href="crm.html" class="nav-link">Lead CRM</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <h2>最新折實價＋月供試算</h2>
+      <p>先了解入場價、首期及月供，再決定值唔值得入示範單位。</p>
+    </div>
+
+    <div class="grid two-col">
+      <section class="card">
+        <h2>月供試算</h2>
+        <label>樓價</label>
+        <input id="price" type="number" value="7000000" />
+        <label>首期比例</label>
+        <select id="down">
+          <option>10</option>
+          <option>20</option>
+          <option selected>30</option>
+          <option>40</option>
+          <option>50</option>
+        </select>
+        <label>年利率（%）</label>
+        <input id="rate" type="number" step="0.01" value="3.5" />
+        <label>年期</label>
+        <select id="years">
+          <option>20</option>
+          <option>25</option>
+          <option selected>30</option>
+        </select>
+        <button onclick="calc()">計算</button>
+        <div id="result" class="result"></div>
+        <p class="muted">只供初步參考，未包括印花稅、律師費、保費、管理費及銀行實際批核條件。</p>
+      </section>
+
+      <section class="card">
+        <h2>WhatsApp領取資料</h2>
+        <form id="leadForm">
+          <label>稱呼</label>
+          <input id="name" required placeholder="陳先生" />
+          <label>電話</label>
+          <input id="phone" required placeholder="91234567" />
+          <label>用途</label>
+          <select id="purpose">
+            <option>自住</option>
+            <option>投資</option>
+            <option>未決定</option>
+          </select>
+          <label>戶型</label>
+          <select id="layout">
+            <option>一房</option>
+            <option>兩房</option>
+            <option>三房或以上</option>
+            <option>車位</option>
+          </select>
+          <label>預算</label>
+          <select id="budget">
+            <option>500萬以下</option>
+            <option>500–700萬</option>
+            <option>700–1000萬</option>
+            <option>1000萬以上</option>
+          </select>
+          <label>最關心</label>
+          <textarea id="concern" placeholder="月供、景觀、交通、回報"></textarea>
+          <button type="submit">開啟WhatsApp</button>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <footer class="wrap footer">
+    <small>© 2026 置業快覽</small>
+  </footer>
+
+  <script>
+    // Agent contact - 修改成你嘅號碼同名稱
+    const AGENT = { name: '你的姓名', whatsapp: '85291234567' };
+
+    function money(n) {
+      return new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(n);
+    }
+
+    function calc() {
+      const p = +document.getElementById('price').value;
+      const d = +document.getElementById('down').value / 100;
+      const r = (+document.getElementById('rate').value / 100) / 12;
+      const n = +document.getElementById('years').value * 12;
+      const dp = p * d;
+      const loan = p - dp;
+      const m = r ? loan * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1) : loan / n;
+      document.getElementById('result').innerHTML = '<b>首期：</b>' + money(dp) + '<br><b>貸款額：</b>' + money(loan) + '<br><b>估算月供：</b>' + money(m);
+    }
+
+    const leadForm = document.getElementById('leadForm');
+    leadForm.onsubmit = function (e) {
+      e.preventDefault();
+      const name = document.getElementById('name');
+      const purpose = document.getElementById('purpose');
+      const layout = document.getElementById('layout');
+      const budget = document.getElementById('budget');
+      const concern = document.getElementById('concern');
+
+      const msg = encodeURIComponent(`你好，我係${name.value}。我想了解樓盤資料：\n用途：${purpose.value}\n戶型：${layout.value}\n預算：${budget.value}\n最關心：${concern.value || '未填'}\n麻煩${AGENT.name}發最新價單、平面圖及月供資料俾我。`);
+      window.open(`https://wa.me/${AGENT.whatsapp}?text=${msg}`, '_blank');
+    };
+
+    calc();
+  </script>
+</body>
+</html>
